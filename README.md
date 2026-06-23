@@ -37,3 +37,11 @@ Agent 型（单个 AI 专家）
 ```bash
 python3 scripts/package_expert.py ~/.workbuddy/plugins/marketplaces/my-experts/plugins/favourite-food-finder
 ```
+
+## License
+
+This project is licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0).
+
+You are free to use, modify, and distribute the contents of this repository, including for commercial purposes, provided that appropriate attribution is given to the original author.
+
+Author: Ziqi Zhong (cczzq77)
