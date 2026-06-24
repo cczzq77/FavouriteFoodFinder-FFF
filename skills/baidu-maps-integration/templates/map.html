@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FFF - 附近收藏的餐厅</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; height: 100vh; display: flex; overflow: hidden; }
+  #sidebar { width: 360px; height: 100%; overflow-y: auto; background: #fff; box-shadow: 2px 0 8px rgba(0,0,0,0.1); z-index: 10; padding: 20px; flex-shrink: 0; }
+  #map-container { flex: 1; height: 100%; position: relative; }
+  #map { width: 100%; height: 100%; }
+  .header { margin-bottom: 16px; }
+  .header h1 { font-size: 20px; color: #333; margin-bottom: 4px; }
+  .header .subtitle { font-size: 13px; color: #666; }
+  .stats { display: flex; gap: 12px; margin-bottom: 16px; }
+  .stat-card { flex: 1; padding: 12px; border-radius: 10px; text-align: center; }
+  .stat-card.primary { background: #E8F0FE; }
+  .stat-card.secondary { background: #F5F5F5; }
+  .stat-card .number { font-size: 28px; font-weight: 700; }
+  .stat-card.primary .number { color: #EA4335; }
+  .stat-card.secondary .number { color: #333; }
+  .stat-card .label { font-size: 12px; color: #666; margin-top: 2px; }
+  .restaurant-list { list-style: none; }
+  .restaurant-item { display: flex; align-items: center; padding: 12px; border-radius: 10px; margin-bottom: 8px; cursor: pointer; transition: background 0.2s; border: 1px solid #eee; }
+  .restaurant-item:hover { background: #F8F9FA; border-color: #ddd; }
+  .restaurant-item .rank { width: 28px; height: 28px; border-radius: 50%; background: #EA4335; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .restaurant-item .rank.far { background: #9E9E9E; }
+  .restaurant-item .info { margin-left: 12px; flex: 1; min-width: 0; }
+  .restaurant-item .name { font-size: 15px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .restaurant-item .address { font-size: 12px; color: #999; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .restaurant-item .distance { font-size: 14px; font-weight: 600; color: #EA4335; flex-shrink: 0; margin-left: 8px; }
+  .restaurant-item .distance.far { color: #9E9E9E; }
+  .empty-state { text-align: center; padding: 40px 20px; color: #999; }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .my-location { display: flex; align-items: center; padding: 10px 12px; background: #E8F0FE; border-radius: 10px; margin-bottom: 16px; font-size: 13px; }
+  .my-location .dot { width: 10px; height: 10px; border-radius: 50%; background: #4285F4; margin-right: 8px; flex-shrink: 0; }
+  .my-location .loc-text { color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .section-title { font-size: 14px; font-weight: 600; color: #333; margin: 16px 0 8px; display: flex; align-items: center; gap: 6px; }
+  .section-title .badge { font-size: 12px; font-weight: 400; color: #666; background: #F5F5F5; padding: 2px 8px; border-radius: 10px; }
+  .legend { display: flex; gap: 16px; margin-bottom: 12px; font-size: 12px; color: #666; }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .legend-dot.near { background: #EA4335; }
+  .legend-dot.far { background: #9E9E9E; }
+  .legend-dot.me { background: #4285F4; }
+
+  @media (max-width: 768px) {
+    body { flex-direction: column; }
+    #sidebar { width: 100%; height: auto; max-height: 45vh; }
+    #map-container { flex: 1; }
+  }
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <div class="header">
+    <h1>🍽️ 附近收藏的餐厅</h1>
+    <div class="subtitle" id="update-time">加载中...</div>
+  </div>
+  <div class="my-location">
+    <div class="dot"></div>
+    <div class="loc-text" id="my-location-text">定位中...</div>
+  </div>
+  <div class="stats">
+    <div class="stat-card primary">
+      <div class="number" id="nearby-count">0</div>
+      <div class="label">1公里内</div>
+    </div>
+    <div class="stat-card secondary">
+      <div class="number" id="total-count">0</div>
+      <div class="label">总收藏</div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot near"></div> 1公里内</div>
+    <div class="legend-item"><div class="legend-dot far"></div> 1公里外</div>
+    <div class="legend-item"><div class="legend-dot me"></div> 我的位置</div>
+  </div>
+  <div class="section-title">📍 1公里内的餐厅 <span class="badge" id="nearby-badge">0家</span></div>
+  <ul class="restaurant-list" id="nearby-list"></ul>
+  <div class="section-title" id="far-section-title" style="display:none;">🗺️ 稍远的收藏 <span class="badge" id="far-badge">0家</span></div>
+  <ul class="restaurant-list" id="far-list"></ul>
+  <div class="empty-state" id="empty-state" style="display:none;">
+    <div class="icon">😔</div>
+    <div>附近1公里内暂无收藏的餐厅</div>
+    <div style="font-size:12px;margin-top:4px;">换个地方试试？</div>
+  </div>
+</div>
+<div id="map-container">
+  <div id="map"></div>
+</div>
+
+<script>
+  // ===== Configuration =====
+  // REPLACE_WITH_DATA will be substituted with actual JSON data
+  var DATA = 'REPLACE_WITH_DATA';
+
+  // ===== Parse Data =====
+  try {
+    DATA = JSON.parse(DATA);
+  } catch(e) {
+    DATA = null;
+  }
+
+  if (!DATA || !DATA.userLocation) {
+    document.getElementById('update-time').textContent = '数据加载失败';
+    document.getElementById('my-location-text').textContent = '无法获取位置';
+    return;
+  }
+
+  var userLat = DATA.userLocation.lat;
+  var userLng = DATA.userLocation.lng;
+  var userAddress = DATA.userLocation.address || (userLat.toFixed(6) + ', ' + userLng.toFixed(6));
+  var restaurants = DATA.restaurants || [];
+  var baiduAK = DATA.baiduAK || '';
+
+  // Sort restaurants by distance
+  restaurants.forEach(function(r) {
+    r.distance = haversineDistance(userLat, userLng, r.lat, r.lng);
+  });
+  restaurants.sort(function(a, b) { return a.distance - b.distance; });
+
+  var nearby = restaurants.filter(function(r) { return r.distance <= 1000; });
+  var far = restaurants.filter(function(r) { return r.distance > 1000; });
+
+  // Update UI
+  document.getElementById('update-time').textContent = '数据更新: ' + new Date().toLocaleString('zh-CN');
+  document.getElementById('my-location-text').textContent = userAddress;
+  document.getElementById('nearby-count').textContent = nearby.length;
+  document.getElementById('total-count').textContent = restaurants.length;
+  document.getElementById('nearby-badge').textContent = nearby.length + '家';
+  document.getElementById('far-badge').textContent = far.length + '家';
+
+  if (nearby.length === 0) {
+    document.getElementById('empty-state').style.display = 'block';
+  }
+
+  if (far.length > 0) {
+    document.getElementById('far-section-title').style.display = 'flex';
+  }
+
+  // Render nearby list
+  var nearbyList = document.getElementById('nearby-list');
+  nearby.forEach(function(r, i) {
+    var li = document.createElement('li');
+    li.className = 'restaurant-item';
+    li.setAttribute('data-index', i);
+    li.setAttribute('data-type', 'nearby');
+    li.innerHTML = '<div class="rank">' + (i + 1) + '</div>' +
+      '<div class="info"><div class="name">' + escapeHtml(r.name) + '</div>' +
+      '<div class="address">' + escapeHtml(r.address || '') + '</div></div>' +
+      '<div class="distance">' + formatDistance(r.distance) + '</div>';
+    li.onclick = function() { panToMarker('nearby', i); };
+    nearbyList.appendChild(li);
+  });
+
+  // Render far list
+  var farList = document.getElementById('far-list');
+  far.forEach(function(r, i) {
+    var li = document.createElement('li');
+    li.className = 'restaurant-item';
+    li.setAttribute('data-index', i);
+    li.setAttribute('data-type', 'far');
+    li.innerHTML = '<div class="rank far">' + (nearby.length + i + 1) + '</div>' +
+      '<div class="info"><div class="name">' + escapeHtml(r.name) + '</div>' +
+      '<div class="address">' + escapeHtml(r.address || '') + '</div></div>' +
+      '<div class="distance far">' + formatDistance(r.distance) + '</div>';
+    li.onclick = function() { panToMarker('far', i); };
+    farList.appendChild(li);
+  });
+
+  // ===== Init Map =====
+  if (typeof BMapGL === 'undefined') {
+    console.warn('BMapGL not loaded, showing static fallback');
+    showMapFallback();
+  } else {
+    initBaiduMap();
+  }
+
+  function initBaiduMap() {
+    var map = new BMapGL.Map('map');
+    var point = new BMapGL.Point(userLng, userLat);
+    map.centerAndZoom(point, 15);
+    map.enableScrollWheelZoom(true);
+    map.setMapStyleV2({ styleId: 'a65ba2ed5d82ff47d3d85de2c1cb4228' });
+
+    // User location marker
+    var userIcon = new BMapGL.Icon(
+      'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="#4285F4" stroke="#fff" stroke-width="3"/><circle cx="12" cy="12" r="3" fill="#fff"/></svg>'),
+      new BMapGL.Size(24, 24)
+    );
+    var userMarker = new BMapGL.Marker(point, { icon: userIcon });
+    map.addOverlay(userMarker);
+
+    // User label
+    var userLabel = new BMapGL.Label('📍 我的位置', {
+      position: point,
+      offset: new BMapGL.Size(15, -35)
+    });
+    userLabel.setStyle({
+      border: 'none', background: 'rgba(66,133,244,0.9)', color: '#fff',
+      padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '600'
+    });
+    map.addOverlay(userLabel);
+
+    // 1km radius circle
+    var circle = new BMapGL.Circle(point, 1000, {
+      strokeColor: '#4285F4', strokeWeight: 2, strokeOpacity: 0.6,
+      fillColor: '#4285F4', fillOpacity: 0.08
+    });
+    map.addOverlay(circle);
+
+    // Restaurant markers
+    var allRestaurants = nearby.concat(far);
+    var markers = [];
+    allRestaurants.forEach(function(r, i) {
+      var isNearby = i < nearby.length;
+      var color = isNearby ? '#EA4335' : '#9E9E9E';
+      var markerPoint = new BMapGL.Point(r.lng, r.lat);
+
+      var iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">' +
+        '<path d="M16 0C7.164 0 0 7.164 0 16c0 12 16 24 16 24s16-12 16-24C32 7.164 24.836 0 16 0z" fill="' + color + '"/>' +
+        '<circle cx="16" cy="14" r="6" fill="#fff"/>' +
+        '</svg>';
+
+      var icon = new BMapGL.Icon(
+        'data:image/svg+xml,' + encodeURIComponent(iconSvg),
+        new BMapGL.Size(32, 40),
+        { anchor: new BMapGL.Size(16, 40) }
+      );
+      var marker = new BMapGL.Marker(markerPoint, { icon: icon });
+      map.addOverlay(marker);
+
+      var distText = formatDistance(r.distance);
+      var infoWindow = new BMapGL.InfoWindow(
+        '<div style="padding:4px;min-width:160px;">' +
+        '<div style="font-size:15px;font-weight:700;color:#333;margin-bottom:4px;">' + escapeHtml(r.name) + '</div>' +
+        '<div style="font-size:12px;color:#666;margin-bottom:2px;">' + escapeHtml(r.address || '') + '</div>' +
+        '<div style="font-size:13px;font-weight:600;color:' + color + ';">距离: ' + distText + '</div>' +
+        '</div>',
+        { width: 200, height: 70 }
+      );
+      marker.addEventListener('click', function() {
+        map.openInfoWindow(infoWindow, markerPoint);
+      });
+
+      markers.push({ marker: marker, point: markerPoint, infoWindow: infoWindow, type: isNearby ? 'nearby' : 'far', index: isNearby ? i : i - nearby.length });
+    });
+
+    // Store for panTo
+    window._mapData = { map: map, markers: markers, nearbyCount: nearby.length };
+
+    // Fit bounds to show all nearby markers
+    if (nearby.length > 0) {
+      setTimeout(function() {
+        var bounds = new BMapGL.Bounds();
+        bounds.extend(point);
+        nearby.forEach(function(r) {
+          bounds.extend(new BMapGL.Point(r.lng, r.lat));
+        });
+        map.setViewport(bounds, { margins: [50, 50, 50, 50] });
+      }, 500);
+    }
+
+    // Pan to marker on list click
+    window.panToMarker = function(type, index) {
+      var m = window._mapData.markers;
+      var idx = type === 'nearby' ? index : window._mapData.nearbyCount + index;
+      if (m[idx]) {
+        window._mapData.map.centerAndZoom(m[idx].point, 17);
+        window._mapData.map.openInfoWindow(m[idx].infoWindow, m[idx].point);
+      }
+    };
+  }
+
+  function showMapFallback() {
+    document.getElementById('map').innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#f8f9fa;color:#999;flex-direction:column;">' +
+      '<div style="font-size:48px;margin-bottom:16px;">🗺️</div>' +
+      '<div>百度地图加载失败</div>' +
+      '<div style="font-size:12px;margin-top:4px;">请检查网络连接和百度地图 AK</div>' +
+      '</div>';
+  }
+
+  // ===== Utilities =====
+  function haversineDistance(lat1, lng1, lat2, lng2) {
+    var R = 6371000;
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLng = (lng2 - lng1) * Math.PI / 180;
+    var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng/2) * Math.sin(dLng/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function formatDistance(meters) {
+    if (meters < 500) return Math.round(meters / 10) * 10 + 'm';
+    if (meters < 1000) return Math.round(meters / 100) * 100 + 'm';
+    return (meters / 1000).toFixed(1) + 'km';
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+</body>
+</html>
